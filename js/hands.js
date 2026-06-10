@@ -20,6 +20,9 @@ const HandTracker = (() => {
     [13,17],[17,18],[18,19],[19,20],[0,17]
   ];
 
+  let armedGestureStartAt = 0;
+  let armedTriggerCooldownUntil = 0;
+
   function init(onReady) {
     const hands = new Hands({
       locateFile: f => `https://cdn.jsdelivr.net/npm/@mediapipe/hands/${f}`
@@ -62,6 +65,10 @@ const HandTracker = (() => {
       cur1.style.display = cur2.style.display = 'none';
       _releaseDrag('L');
       _releaseDrag('R');
+      if (Main.getPhase() === 'armed') {
+        Main.setArmedProgress(0, false);
+      }
+      armedGestureStartAt = 0;
       return;
     }
 
@@ -78,6 +85,11 @@ const HandTracker = (() => {
     const left  = handsData.find(h => h.label === 'Left');
     const right = handsData.find(h => h.label === 'Right');
 
+    if (Main.getPhase() === 'armed') {
+      _processArmedTrigger(left, right);
+      return;
+    }
+
     if (Main.getPhase() === 'polaroid') {
       _processPolaroidHands(left, right);
       return;
@@ -85,6 +97,51 @@ const HandTracker = (() => {
 
     _processHand('L', left);
     _processHand('R', right);
+  }
+
+  function _processArmedTrigger(left, right) {
+    const now = performance.now();
+    const holdMs = 700;
+    const leftOpen = !!left && _isOpenPalm(left.lms);
+    const rightOpen = !!right && _isOpenPalm(right.lms);
+    const openPalmDetected = leftOpen || rightOpen;
+
+    if (cur1) cur1.style.display = left ? 'block' : 'none';
+    if (cur2) cur2.style.display = right ? 'block' : 'none';
+
+    if (left && cur1) {
+      const lp = { x: (left.lms[4].x + left.lms[8].x) / 2, y: (left.lms[4].y + left.lms[8].y) / 2 };
+      cur1.style.left = lp.x + 'px';
+      cur1.style.top = lp.y + 'px';
+      cur1.classList.toggle('active', leftOpen);
+    }
+    if (right && cur2) {
+      const rp = { x: (right.lms[4].x + right.lms[8].x) / 2, y: (right.lms[4].y + right.lms[8].y) / 2 };
+      cur2.style.left = rp.x + 'px';
+      cur2.style.top = rp.y + 'px';
+      cur2.classList.toggle('active', rightOpen);
+    }
+
+    if (now < armedTriggerCooldownUntil) {
+      Main.setArmedProgress(0, false);
+      return;
+    }
+
+    if (openPalmDetected) {
+      if (!armedGestureStartAt) armedGestureStartAt = now;
+      const heldMs = now - armedGestureStartAt;
+      Main.setArmedProgress(heldMs / holdMs, true);
+      if (heldMs > holdMs) {
+        Main.setArmedProgress(1, true);
+        armedGestureStartAt = 0;
+        armedTriggerCooldownUntil = now + 1200;
+        Main.triggerCaptureStart('hand');
+      }
+      return;
+    }
+
+    Main.setArmedProgress(0, false);
+    armedGestureStartAt = 0;
   }
 
   function _processPolaroidHands(left, right) {

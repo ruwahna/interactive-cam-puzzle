@@ -9,6 +9,7 @@ const Main = (() => {
   const flashEl = document.getElementById('flash');
   const cntEl   = document.getElementById('countdown');
   const grEl    = document.getElementById('getready');
+  const gpEl    = document.getElementById('gesture-progress');
   const polEl   = document.getElementById('polaroid');
   const badgeEl = document.getElementById('badge');
   const hintEl  = document.getElementById('hint');
@@ -47,6 +48,45 @@ const Main = (() => {
 
   function getPhase() { return phase; }
   function setPhase(p) { phase = p; }
+
+  function _enterArmedMode() {
+    phase = 'armed';
+    polEl.style.display = 'none';
+    badgeEl.style.display = 'none';
+    ctrlEl.style.display = 'none';
+    cur1.style.display = 'none';
+    cur2.style.display = 'none';
+    Puzzle.clear();
+    mouseDrag = null;
+
+    statusEl.textContent = 'Camera Ready';
+    if (usePlaceholderCapture) {
+      hintEl.textContent = 'press Enter atau Space untuk mulai countdown';
+    } else {
+      hintEl.textContent = 'angkat telapak tangan (open palm) untuk mulai countdown';
+    }
+    grEl.style.display = 'none';
+    cntEl.style.display = 'none';
+    setArmedProgress(0, false);
+    if (gpEl) gpEl.style.display = 'flex';
+  }
+
+  function triggerCaptureStart(source) {
+    if (phase !== 'armed') return;
+    setArmedProgress(0, false);
+    if (gpEl) gpEl.style.display = 'none';
+    if (source === 'hand') {
+      statusEl.textContent = 'Hand Triggered';
+    }
+    startCountdown();
+  }
+
+  function setArmedProgress(progress, active) {
+    if (!gpEl) return;
+    const p = Math.max(0, Math.min(1, Number(progress) || 0));
+    gpEl.style.setProperty('--progress', p.toFixed(3));
+    gpEl.classList.toggle('active', !!active);
+  }
 
   // ── MOUSE DRAG FALLBACK ──
   function _screenToOrtho(sx, sy) {
@@ -94,8 +134,12 @@ const Main = (() => {
 
   // ── KEYBOARD ──
   document.addEventListener('keydown', e => {
-    if (e.key === 'Enter' && (phase === 'puzzle' || phase === 'polaroid')) {
-      startCountdown();
+    if ((e.key === 'Enter' || e.key === ' ') && phase === 'armed') {
+      triggerCaptureStart('keyboard');
+      return;
+    }
+    if (e.key === 'Enter' && (phase === 'puzzle' || phase === 'polaroid' || phase === 'idle')) {
+      _enterArmedMode();
     }
     if ((e.key === 'g' || e.key === 'G') && phase === 'puzzle') {
       Puzzle.cycleGrid();
@@ -106,7 +150,7 @@ const Main = (() => {
   document.getElementById('resetbtn').addEventListener('click', () => {
     polEl.style.display   = 'none';
     badgeEl.style.display = 'none';
-    startCountdown();
+    _enterArmedMode();
   });
 
   // ── START BUTTON ──
@@ -128,8 +172,8 @@ const Main = (() => {
       // Inisialisasi hand tracking berbasis event readiness.
       _initHandTracking();
 
-      // Mulai countdown segera
-      startCountdown();
+      // Masuk mode siaga: tunggu trigger gesture/keyboard.
+      _enterArmedMode();
 
     } catch (e) {
       errEl.style.display = 'block';
@@ -145,7 +189,7 @@ const Main = (() => {
       usePlaceholderCapture = true;
       setInputMode('mouse', 'NO CAMERA');
       startScreen.style.display = 'none';
-      startCountdown();
+      _enterArmedMode();
     });
   }
 
@@ -160,6 +204,9 @@ const Main = (() => {
         HandTracker.init(() => {
           handTrackingReady = true;
           setInputMode('hand', 'READY');
+          if (phase === 'armed' && !usePlaceholderCapture) {
+            hintEl.textContent = 'angkat telapak tangan (open palm) untuk mulai countdown';
+          }
           console.log('[PuzzleCam] MediaPipe loaded OK');
         });
       } catch (e) {
@@ -189,6 +236,9 @@ const Main = (() => {
     window.addEventListener('mediapipe-failed', () => {
       console.warn('[PuzzleCam] MediaPipe gagal load, lanjut mouse/touch');
       setInputMode('mouse', 'MP FAILED');
+      if (phase === 'armed') {
+        hintEl.textContent = 'MediaPipe gagal: tekan Enter atau Space untuk mulai countdown';
+      }
     }, { once: true });
   }
 
@@ -211,6 +261,7 @@ const Main = (() => {
     statusEl.textContent = 'Get Ready...';
     hintEl.textContent   = 'drag pieces dengan mouse / pinch tangan';
     grEl.style.display   = 'block';
+    if (gpEl) gpEl.style.display = 'none';
 
     let n = 3;
     cntEl.style.display = 'block';
@@ -292,6 +343,13 @@ const Main = (() => {
     return c;
   }
 
-  return { getPhase, setPhase, startCountdown };
+  return {
+    getPhase,
+    setPhase,
+    startCountdown,
+    triggerCaptureStart,
+    armForNextShot: _enterArmedMode,
+    setArmedProgress,
+  };
 
 })();

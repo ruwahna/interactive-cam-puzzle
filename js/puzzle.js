@@ -160,7 +160,7 @@ const Puzzle = (() => {
     Main.setPhase('polaroid');
     ctrlEl.style.display = 'none';
     statusEl.textContent = 'Moment Captured';
-    hintEl.textContent   = 'press Enter or Reset to play again';
+    hintEl.textContent   = 'press Enter/Reset untuk siaga foto ulang';
 
     polaroidSpin = {
       active: true,
@@ -257,7 +257,7 @@ const Puzzle = (() => {
     if (!polaroidSpin || !polaroidSpin.active) return;
     polaroidSpin.active = false;
     statusEl.textContent = 'Photo Removed';
-    hintEl.textContent = 'press Enter or Reset to play again';
+    hintEl.textContent = 'masuk mode siaga foto ulang...';
     polEl.style.transition = 'transform 0.35s ease, opacity 0.35s ease';
     polEl.style.transform = 'translate(-50%, -50%) rotate(540deg) scale(0.15)';
     polEl.style.opacity = '0';
@@ -265,7 +265,7 @@ const Puzzle = (() => {
       polEl.style.display = 'none';
       polEl.style.opacity = '1';
       polEl.style.transition = '';
-      Main.setPhase('idle');
+      Main.armForNextShot();
     }, 380);
   }
 
