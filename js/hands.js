@@ -100,48 +100,55 @@ const HandTracker = (() => {
   }
 
   function _processArmedTrigger(left, right) {
-    const now = performance.now();
-    const holdMs = 700;
-    const leftOpen = !!left && _isOpenPalm(left.lms);
-    const rightOpen = !!right && _isOpenPalm(right.lms);
-    const openPalmDetected = leftOpen || rightOpen;
+    const leftPinch = !!left && _isPinching(left.lms);
+    const rightPinch = !!right && _isPinching(right.lms);
 
     if (cur1) cur1.style.display = left ? 'block' : 'none';
     if (cur2) cur2.style.display = right ? 'block' : 'none';
 
+    let lp = null;
+    let rp = null;
+
     if (left && cur1) {
-      const lp = { x: (left.lms[4].x + left.lms[8].x) / 2, y: (left.lms[4].y + left.lms[8].y) / 2 };
+      lp = { x: (left.lms[4].x + left.lms[8].x) / 2, y: (left.lms[4].y + left.lms[8].y) / 2 };
       cur1.style.left = lp.x + 'px';
       cur1.style.top = lp.y + 'px';
-      cur1.classList.toggle('active', leftOpen);
+      cur1.classList.toggle('active', leftPinch);
     }
     if (right && cur2) {
-      const rp = { x: (right.lms[4].x + right.lms[8].x) / 2, y: (right.lms[4].y + right.lms[8].y) / 2 };
+      rp = { x: (right.lms[4].x + right.lms[8].x) / 2, y: (right.lms[4].y + right.lms[8].y) / 2 };
       cur2.style.left = rp.x + 'px';
       cur2.style.top = rp.y + 'px';
-      cur2.classList.toggle('active', rightOpen);
+      cur2.classList.toggle('active', rightPinch);
     }
 
+    const now = performance.now();
     if (now < armedTriggerCooldownUntil) {
-      Main.setArmedProgress(0, false);
       return;
     }
 
-    if (openPalmDetected) {
-      if (!armedGestureStartAt) armedGestureStartAt = now;
-      const heldMs = now - armedGestureStartAt;
-      Main.setArmedProgress(heldMs / holdMs, true);
-      if (heldMs > holdMs) {
-        Main.setArmedProgress(1, true);
-        armedGestureStartAt = 0;
-        armedTriggerCooldownUntil = now + 1200;
-        Main.triggerCaptureStart('hand');
+    if (leftPinch && rightPinch && lp && rp) {
+      const minX = Math.min(lp.x, rp.x);
+      const maxX = Math.max(lp.x, rp.x);
+      const minY = Math.min(lp.y, rp.y);
+      const maxY = Math.max(lp.y, rp.y);
+      
+      const w = maxX - minX;
+      const h = maxY - minY;
+      
+      if (w > 50 && h > 50) {
+        Main.setCustomViewfinder({ x: minX, y: minY, w, h });
+        armedGestureStartAt = now;
       }
-      return;
+    } else {
+      if (armedGestureStartAt) {
+        // Both hands were pinching, now they aren't, and the time threshold was met? 
+        // Just trigger immediately on release.
+        Main.triggerCaptureStart('hand');
+        armedTriggerCooldownUntil = now + 1200;
+        armedGestureStartAt = 0;
+      }
     }
-
-    Main.setArmedProgress(0, false);
-    armedGestureStartAt = 0;
   }
 
   function _processPolaroidHands(left, right) {

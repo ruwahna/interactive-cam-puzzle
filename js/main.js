@@ -20,6 +20,7 @@ const Main = (() => {
   const statusEl= document.getElementById('status');
   const modeEl  = document.getElementById('input-mode');
   const noCamBtn = document.getElementById('start-nocam');
+  const viewfinderEl = document.getElementById('viewfinder');
 
   let phase = 'idle';
   let mouseDrag = null;
@@ -27,6 +28,7 @@ const Main = (() => {
   let handTrackingInitStarted = false;
   let countdownTimer = null;
   let usePlaceholderCapture = false;
+  let customVfRect = null;
 
   const startScreenEl = document.getElementById('start-screen');
   const mpStatusEl = document.getElementById('mp-status');
@@ -47,7 +49,41 @@ const Main = (() => {
   setInputMode('mouse');
 
   function getPhase() { return phase; }
-  function setPhase(p) { phase = p; }
+  function setPhase(p) { 
+    phase = p; 
+    updateViewfinder();
+  }
+
+  function updateViewfinder() {
+    if (!viewfinderEl) return;
+    if (phase === 'armed' || phase === 'countdown' || phase === 'puzzle') {
+      viewfinderEl.style.display = 'block';
+      if (customVfRect) {
+        viewfinderEl.style.width = `${customVfRect.w}px`;
+        viewfinderEl.style.height = `${customVfRect.h}px`;
+        viewfinderEl.style.left = `${customVfRect.x}px`;
+        viewfinderEl.style.top = `${customVfRect.y}px`;
+        viewfinderEl.style.transform = 'none';
+      } else {
+        const vw = window.innerWidth;
+        const vh = window.innerHeight;
+        const iw = video.videoWidth || 1280;
+        const ih = video.videoHeight || 720;
+        
+        const scale = Math.min(vw * 0.85 / iw, (vh - 80) * 0.85 / ih);
+        const dw = iw * scale;
+        const dh = ih * scale;
+        
+        viewfinderEl.style.width = `${dw}px`;
+        viewfinderEl.style.height = `${dh}px`;
+        viewfinderEl.style.left = '50%';
+        viewfinderEl.style.top = '50%';
+        viewfinderEl.style.transform = 'translate(-50%, -50%)';
+      }
+    } else {
+      viewfinderEl.style.display = 'none';
+    }
+  }
 
   function _enterArmedMode() {
     phase = 'armed';
@@ -63,12 +99,13 @@ const Main = (() => {
     if (usePlaceholderCapture) {
       hintEl.textContent = 'press Enter atau Space untuk mulai countdown';
     } else {
-      hintEl.textContent = 'angkat telapak tangan (open palm) untuk mulai countdown';
+      hintEl.textContent = 'pinch both hands - expand - release';
     }
     grEl.style.display = 'none';
     cntEl.style.display = 'none';
     setArmedProgress(0, false);
     if (gpEl) gpEl.style.display = 'flex';
+    updateViewfinder();
   }
 
   function triggerCaptureStart(source) {
@@ -205,7 +242,7 @@ const Main = (() => {
           handTrackingReady = true;
           setInputMode('hand', 'READY');
           if (phase === 'armed' && !usePlaceholderCapture) {
-            hintEl.textContent = 'angkat telapak tangan (open palm) untuk mulai countdown';
+            hintEl.textContent = 'pinch both hands - expand - release';
           }
           console.log('[PuzzleCam] MediaPipe loaded OK');
         });
@@ -250,6 +287,7 @@ const Main = (() => {
     }
 
     phase = 'countdown';
+    updateViewfinder();
     polEl.style.display   = 'none';
     badgeEl.style.display = 'none';
     ctrlEl.style.display  = 'none';
@@ -298,11 +336,48 @@ const Main = (() => {
       ctx.translate(c.width, 0);
       ctx.scale(-1, 1);
       ctx.drawImage(video, 0, 0);
+
+      if (customVfRect) {
+        const vw = window.innerWidth;
+        const vh = window.innerHeight;
+        const screenAspect = vw / vh;
+        const videoAspect = c.width / c.height;
+        
+        let visW = c.width;
+        let visH = c.height;
+        let visX = 0;
+        let visY = 0;
+
+        if (screenAspect > videoAspect) {
+          visW = c.width;
+          visH = c.width / screenAspect;
+          visY = (c.height - visH) / 2;
+        } else {
+          visH = c.height;
+          visW = c.height * screenAspect;
+          visX = (c.width - visW) / 2;
+        }
+
+        const scaleX = visW / vw;
+        const scaleY = visH / vh;
+
+        const cropX = visX + customVfRect.x * scaleX;
+        const cropY = visY + customVfRect.y * scaleY;
+        const cropW = customVfRect.w * scaleX;
+        const cropH = customVfRect.h * scaleY;
+
+        const cropC = document.createElement('canvas');
+        cropC.width = cropW;
+        cropC.height = cropH;
+        cropC.getContext('2d').drawImage(c, cropX, cropY, cropW, cropH, 0, 0, cropW, cropH);
+        c = cropC;
+      }
     } else {
       c = _createPlaceholderFrame();
     }
 
     phase = 'puzzle';
+    updateViewfinder();
     Puzzle.build(c);
   }
 
@@ -343,6 +418,9 @@ const Main = (() => {
     return c;
   }
 
+  window.addEventListener('resize', updateViewfinder);
+  video.addEventListener('loadedmetadata', updateViewfinder);
+
   return {
     getPhase,
     setPhase,
@@ -350,6 +428,8 @@ const Main = (() => {
     triggerCaptureStart,
     armForNextShot: _enterArmedMode,
     setArmedProgress,
+    setCustomViewfinder: (rect) => { customVfRect = rect; updateViewfinder(); },
+    getCustomViewfinder: () => customVfRect
   };
 
 })();

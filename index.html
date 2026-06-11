@@ -1,158 +1,169 @@
 <!DOCTYPE html>
 <html lang="id">
+
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Puzzle Cam</title>
   <link rel="stylesheet" href="css/style.css" />
 </head>
+
 <body>
-<div id="container">
+  <div id="container">
 
-  <video id="bg-video" autoplay muted playsinline></video>
-  <canvas id="three-canvas"></canvas>
-  <canvas id="hand-canvas"></canvas>
-  <div id="flash"></div>
+    <video id="bg-video" autoplay muted playsinline></video>
+    <canvas id="three-canvas"></canvas>
+    <canvas id="hand-canvas"></canvas>
+    <div id="flash"></div>
 
-  <div id="topbar">
-    <span class="title">Puzzle Cam &mdash; Single Shot</span>
-    <span id="status">Get Ready...</span>
-    <span id="input-mode">MOUSE MODE</span>
-    <span id="badge">⬡ FROZEN</span>
+    <!-- Viewfinder Pembatas Puzzle -->
+    <div id="viewfinder">
+      <div class="vf-corner vf-tl"></div>
+      <div class="vf-corner vf-tr"></div>
+      <div class="vf-corner vf-bl"></div>
+      <div class="vf-corner vf-br"></div>
+    </div>
+
+    <div id="topbar">
+      <span class="title">Puzzle Cam &mdash; Single Shot</span>
+      <span id="status">Get Ready...</span>
+      <span id="input-mode">MOUSE MODE</span>
+      <span id="badge">⬡ FROZEN</span>
+    </div>
+
+    <div id="countdown"></div>
+    <div id="getready">GET READY...</div>
+
+    <div id="polaroid">
+      <canvas id="pol-canvas"></canvas>
+      <div class="pol-user">@puzzle_cam</div>
+      <div class="pol-cap">moment captured</div>
+    </div>
+
+    <div id="bottombar">
+      <span id="hint">both hands can drag simultaneously</span>
+      <button id="resetbtn">&#8634; Reset</button>
+    </div>
+
+    <div id="controls">
+      <div class="crow" style="margin-bottom: 8px; border-bottom: 1px solid rgba(255,255,255,0.2); padding-bottom: 4px;">
+        <span class="ck" style="color:#35f5d2; letter-spacing: 2px;">IMAGE PROCESSING DATA</span>
+      </div>
+      <div class="crow"><span class="ck">CROP SIZE (ROI)</span><span class="cv" id="stat-crop">1280x720 px</span></div>
+      <div class="crow"><span class="ck">COLOR SPACE</span><span class="cv">RGB 24-bit</span></div>
+      <div class="crow"><span class="ck">GRID SLICE</span><span class="cv" id="stat-grid">3x3</span></div>
+      <div class="crow"><span class="ck">MAPPING</span><span class="cv">UV Texture Mapping</span></div>
+      <div class="crow"><span class="ck">FEATURE EXTR.</span><span class="cv">Hand Landmarks (MediaPipe)</span></div>
+      <div class="crow"><span class="ck">TRANSFORM</span><span class="cv">Mirror & Translate</span></div>
+      <div class="crow"><span class="ck">ENHANCEMENT</span><span class="cv">Brightness Filter</span></div>
+      <div class="crow"><span class="ck">RENDER FPS</span><span class="cv" id="stat-fps">60</span></div>
+    </div>
+
+    <div id="pc1"></div>
+    <div id="pc2"></div>
+
+    <!-- START SCREEN -->
+    <div id="start-screen">
+      <h1>Puzzle Cam</h1>
+      <p>Hand Tracking &mdash; Camera Puzzle</p>
+      <button id="startbtn">Enable Camera</button>
+      <button id="start-nocam" type="button" style="display:none;">Start Tanpa Kamera</button>
+      <div id="camerr"></div>
+      <div id="mp-status" style="color:rgba(255,255,255,0.4);font-size:10px;margin-top:12px;letter-spacing:2px;"></div>
+      <button id="mp-retry" type="button" style="display:none;margin-top:10px;">Retry MediaPipe</button>
+    </div>
+
   </div>
 
-  <div id="countdown"></div>
-  <div id="getready">GET READY...</div>
-  <div id="gesture-progress" aria-live="polite">
-    <div class="gp-ring"></div>
-    <div class="gp-text">OPEN PALM</div>
-    <div class="gp-sub">Hold to capture</div>
-  </div>
+  <!-- THREE.JS -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
 
-  <div id="polaroid">
-    <canvas id="pol-canvas"></canvas>
-    <div class="pol-user">@puzzle_cam</div>
-    <div class="pol-cap">moment captured</div>
-  </div>
+  <!-- MEDIAPIPE (load async, puzzle tetap jalan tanpa ini) -->
+  <script>
+    // Load MediaPipe secara dinamis dengan fallback CDN, tidak blok app jika gagal
+    const mpStatus = document.getElementById('mp-status');
+    const mpRetry = document.getElementById('mp-retry');
+    window.__mediapipeReady = false;
+    window.__mediapipeFailed = false;
+    window.__mediapipeLoading = false;
 
-  <div id="bottombar">
-    <span id="hint">both hands can drag simultaneously</span>
-    <button id="resetbtn">&#8634; Reset</button>
-  </div>
+    function loadScriptWithFallback(urls) {
+      return new Promise((resolve, reject) => {
+        let i = 0;
+        const next = () => {
+          if (i >= urls.length) {
+            reject(new Error('Semua CDN gagal untuk script ini'));
+            return;
+          }
+          const src = urls[i++];
+          const s = document.createElement('script');
+          s.src = src;
+          s.async = true;
+          s.crossOrigin = 'anonymous';
+          s.onload = () => resolve(src);
+          s.onerror = () => {
+            console.warn('[PuzzleCam] Gagal load:', src);
+            s.remove();
+            next();
+          };
+          document.head.appendChild(s);
+        };
+        next();
+      });
+    }
 
-  <div id="controls">
-    <div class="crow"><span class="ck">LEFT FIST</span><span class="cv">freeze movement</span></div>
-    <div class="crow"><span class="ck">RIGHT FIST</span><span class="cv">free tilt mode</span></div>
-    <div class="crow"><span class="ck">PINCH (tangan manapun)</span><span class="cv">grab & drag piece</span></div>
-    <div class="crow"><span class="ck">MOUSE / TOUCH</span><span class="cv">drag piece (fallback)</span></div>
-    <div class="crow"><span class="ck">ENTER</span><span class="cv">restart puzzle</span></div>
-    <div class="crow"><span class="ck">G KEY</span><span class="cv">ganti grid 3x3 / 2x2 / 4x4</span></div>
-  </div>
+    async function bootMediaPipe() {
+      if (window.__mediapipeLoading || window.__mediapipeReady) return;
+      window.__mediapipeLoading = true;
+      mpStatus.textContent = 'Loading MediaPipe...';
+      if (mpRetry) mpRetry.style.display = 'none';
+      try {
+        const camSrc = await loadScriptWithFallback([
+          'https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js',
+          'https://unpkg.com/@mediapipe/camera_utils/camera_utils.js'
+        ]);
+        const handSrc = await loadScriptWithFallback([
+          'https://cdn.jsdelivr.net/npm/@mediapipe/hands/hands.js',
+          'https://unpkg.com/@mediapipe/hands/hands.js'
+        ]);
 
-  <div id="pc1"></div>
-  <div id="pc2"></div>
-
-  <!-- START SCREEN -->
-  <div id="start-screen">
-    <h1>Puzzle Cam</h1>
-    <p>Hand Tracking &mdash; Camera Puzzle</p>
-    <button id="startbtn">Enable Camera</button>
-    <button id="start-nocam" type="button" style="display:none;">Start Tanpa Kamera</button>
-    <div id="camerr"></div>
-    <div id="mp-status" style="color:rgba(255,255,255,0.4);font-size:10px;margin-top:12px;letter-spacing:2px;"></div>
-    <button id="mp-retry" type="button" style="display:none;margin-top:10px;">Retry MediaPipe</button>
-  </div>
-
-</div>
-
-<!-- THREE.JS -->
-<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
-
-<!-- MEDIAPIPE (load async, puzzle tetap jalan tanpa ini) -->
-<script>
-  // Load MediaPipe secara dinamis dengan fallback CDN, tidak blok app jika gagal
-  const mpStatus = document.getElementById('mp-status');
-  const mpRetry = document.getElementById('mp-retry');
-  window.__mediapipeReady = false;
-  window.__mediapipeFailed = false;
-  window.__mediapipeLoading = false;
-
-  function loadScriptWithFallback(urls) {
-    return new Promise((resolve, reject) => {
-      let i = 0;
-      const next = () => {
-        if (i >= urls.length) {
-          reject(new Error('Semua CDN gagal untuk script ini'));
+        if (typeof Hands !== 'undefined' && typeof Camera !== 'undefined') {
+          window.__mediapipeReady = true;
+          window.__mediapipeFailed = false;
+          mpStatus.textContent = '✓ MediaPipe Ready';
+          if (mpRetry) mpRetry.style.display = 'none';
+          console.log('[PuzzleCam] MediaPipe ready from:', camSrc, handSrc);
+          window.dispatchEvent(new Event('mediapipe-ready'));
+          window.__mediapipeLoading = false;
           return;
         }
-        const src = urls[i++];
-        const s = document.createElement('script');
-        s.src = src;
-        s.async = true;
-        s.crossOrigin = 'anonymous';
-        s.onload = () => resolve(src);
-        s.onerror = () => {
-          console.warn('[PuzzleCam] Gagal load:', src);
-          s.remove();
-          next();
-        };
-        document.head.appendChild(s);
-      };
-      next();
-    });
-  }
-
-  async function bootMediaPipe() {
-    if (window.__mediapipeLoading || window.__mediapipeReady) return;
-    window.__mediapipeLoading = true;
-    mpStatus.textContent = 'Loading MediaPipe...';
-    if (mpRetry) mpRetry.style.display = 'none';
-    try {
-      const camSrc = await loadScriptWithFallback([
-        'https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js',
-        'https://unpkg.com/@mediapipe/camera_utils/camera_utils.js'
-      ]);
-      const handSrc = await loadScriptWithFallback([
-        'https://cdn.jsdelivr.net/npm/@mediapipe/hands/hands.js',
-        'https://unpkg.com/@mediapipe/hands/hands.js'
-      ]);
-
-      if (typeof Hands !== 'undefined' && typeof Camera !== 'undefined') {
-        window.__mediapipeReady = true;
-        window.__mediapipeFailed = false;
-        mpStatus.textContent = '✓ MediaPipe Ready';
-        if (mpRetry) mpRetry.style.display = 'none';
-        console.log('[PuzzleCam] MediaPipe ready from:', camSrc, handSrc);
-        window.dispatchEvent(new Event('mediapipe-ready'));
+        throw new Error('Library loaded but global object missing');
+      } catch (e) {
+        window.__mediapipeFailed = true;
+        mpStatus.textContent = '⚠ MediaPipe gagal load - pakai mouse/touch';
+        if (mpRetry) mpRetry.style.display = 'inline-block';
+        console.warn('[PuzzleCam] MediaPipe failed:', e);
+        window.dispatchEvent(new Event('mediapipe-failed'));
+      } finally {
         window.__mediapipeLoading = false;
-        return;
       }
-      throw new Error('Library loaded but global object missing');
-    } catch (e) {
-      window.__mediapipeFailed = true;
-      mpStatus.textContent = '⚠ MediaPipe gagal load - pakai mouse/touch';
-      if (mpRetry) mpRetry.style.display = 'inline-block';
-      console.warn('[PuzzleCam] MediaPipe failed:', e);
-      window.dispatchEvent(new Event('mediapipe-failed'));
-    } finally {
-      window.__mediapipeLoading = false;
     }
-  }
 
-  if (mpRetry) {
-    mpRetry.addEventListener('click', () => {
-      window.__mediapipeFailed = false;
-      bootMediaPipe();
-    });
-  }
+    if (mpRetry) {
+      mpRetry.addEventListener('click', () => {
+        window.__mediapipeFailed = false;
+        bootMediaPipe();
+      });
+    }
 
-  bootMediaPipe();
-</script>
+    bootMediaPipe();
+  </script>
 
-<!-- App modules -->
-<script src="js/puzzle.js?v=3"></script>
-<script src="js/renderer.js?v=3"></script>
-<script src="js/hands.js?v=3"></script>
-<script src="js/main.js?v=3"></script>
+  <!-- App modules -->
+  <script src="js/puzzle.js?v=3"></script>
+  <script src="js/renderer.js?v=3"></script>
+  <script src="js/hands.js?v=3"></script>
+  <script src="js/main.js?v=3"></script>
 </body>
+
 </html>

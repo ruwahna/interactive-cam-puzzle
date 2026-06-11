@@ -39,21 +39,41 @@ const Puzzle = (() => {
     const iw = capturedImg.width;
     const ih = capturedImg.height;
 
-    const scale = Math.min(vw * 0.85 / iw, (vh - 80) * 0.85 / ih);
-    const dw = iw * scale;
-    const dh = ih * scale;
+    let dw, dh, ox, oy;
+    const customVf = typeof Main.getCustomViewfinder === 'function' ? Main.getCustomViewfinder() : null;
+
+    if (customVf) {
+      dw = customVf.w;
+      dh = customVf.h;
+      
+      const cx = customVf.x + customVf.w / 2;
+      const cy = customVf.y + customVf.h / 2;
+      const orthoCenterX = cx - vw / 2;
+      const orthoCenterY = -(cy - vh / 2);
+      
+      ox = orthoCenterX - dw / 2;
+      oy = orthoCenterY - dh / 2;
+    } else {
+      const scale = Math.min(vw * 0.85 / iw, (vh - 80) * 0.85 / ih);
+      dw = iw * scale;
+      dh = ih * scale;
+      ox = -dw / 2;
+      oy = -dh / 2;
+    }
+
     const pw = dw / COLS;
     const ph = dh / ROWS;
-
-    // Ortho origin (bottom-left corner of assembled puzzle)
-    const ox = -dw / 2;
-    const oy = -dh / 2;
 
     for (let row = 0; row < ROWS; row++) {
       for (let col = 0; col < COLS; col++) {
         _createPiece(col, row, pw, ph, ox, oy);
       }
     }
+
+    const statCropEl = document.getElementById('stat-crop');
+    const statGridEl = document.getElementById('stat-grid');
+    if (statCropEl) statCropEl.textContent = `${Math.round(iw)}x${Math.round(ih)} px`;
+    if (statGridEl) statGridEl.textContent = `${COLS}x${ROWS}`;
 
     statusEl.textContent = 'Drag Pieces With Pinch';
     ctrlEl.style.display = 'block';
@@ -179,6 +199,13 @@ const Puzzle = (() => {
     polCvs.width  = pw;
     polCvs.height = ph;
     polCvs.getContext('2d').drawImage(capturedImg, 0, 0, pw, ph);
+    
+    // Tampilkan informasi pengolahan citra
+    const polUserEl = document.querySelector('.pol-user');
+    const polCapEl = document.querySelector('.pol-cap');
+    if (polUserEl) polUserEl.textContent = `Crop: ${Math.round(capturedImg.width)}x${Math.round(capturedImg.height)}px`;
+    if (polCapEl) polCapEl.textContent = `Grid: ${COLS}x${ROWS} | UV Mapped`;
+
     polEl.style.display = 'block';
     polEl.dataset.active = '1';
     polEl.style.transition = 'transform 180ms ease-out, opacity 180ms ease-out';

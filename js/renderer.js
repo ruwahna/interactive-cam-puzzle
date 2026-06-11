@@ -37,10 +37,23 @@ const Renderer = (() => {
 
   // ── RENDER LOOP ──
   const clock = new THREE.Clock();
+  let frameCount = 0;
+  let lastTime = performance.now();
+  let fpsEl = null;
 
   function loop() {
     requestAnimationFrame(loop);
     const t = clock.getElapsedTime();
+
+    // FPS Calculation
+    frameCount++;
+    const now = performance.now();
+    if (now - lastTime >= 1000) {
+      if (!fpsEl) fpsEl = document.getElementById('stat-fps');
+      if (fpsEl) fpsEl.textContent = frameCount;
+      frameCount = 0;
+      lastTime = now;
+    }
 
     // Gentle float animation for unsolved pieces
     if (window.Puzzle && typeof Puzzle.floatPieces === 'function') {
